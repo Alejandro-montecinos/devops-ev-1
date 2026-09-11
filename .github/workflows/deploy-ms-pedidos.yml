@@ -1,20 +1,20 @@
-name: Deploy ms-vehiculos a EC2
+name: Deploy ms-pedidos a EC2
 
-# Este archivo debe vivir en la RAIZ del repo: <raiz-del-repo>/.github/workflows/deploy-ms-vehiculos.yml
-# (junto a las carpetas de cada microservicio, ej. ms-vehiculos/, y a futuro ms-usuarios/, etc.)
+# Este archivo debe vivir en la RAIZ del repo: <raiz-del-repo>/.github/workflows/deploy-ms-pedidos.yml
+# (junto a las carpetas de cada microservicio, ej. ms-pedidos/, y a futuro ms-usuarios/, etc.)
 # GitHub solo lee workfldows en .github/workflows/ de la raiz del repo, nunca dentro de una subcarpeta.
 
 on:
   push:
     branches: [main]
     paths:
-      - 'ms-vehiculos/**'
-      - '.github/workflows/deploy-ms-vehiculos.yml'
+      - 'ms-pedidos/**'
+      - '.github/workflows/deploy-ms-pedidos.yml'
   workflow_dispatch:
 
 defaults:
   run:
-    working-directory: ms-vehiculos
+    working-directory: ms-pedidos
 
 jobs:
   build-and-deploy:
@@ -42,7 +42,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT || 22 }}
-          source: 'ms-vehiculos/target/pedidosBackend-0.0.1-SNAPSHOT.jar'
+          source: 'ms-pedidos/target/pedidosBackend-0.0.1-SNAPSHOT.jar'
           target: '/home/${{ secrets.EC2_USER }}/micros'
           strip_components: 2
 
@@ -54,5 +54,5 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT || 22 }}
           script: |
-            sudo systemctl restart ms-vehiculos
-            sudo systemctl status ms-vehiculos --no-pager
+            sudo systemctl restart ms-pedidos
+            sudo systemctl status ms-pedidos --no-pager
