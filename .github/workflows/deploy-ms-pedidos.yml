@@ -1,0 +1,58 @@
+name: Deploy ms-vehiculos a EC2
+
+# Este archivo debe vivir en la RAIZ del repo: <raiz-del-repo>/.github/workflows/deploy-ms-vehiculos.yml
+# (junto a las carpetas de cada microservicio, ej. ms-vehiculos/, y a futuro ms-usuarios/, etc.)
+# GitHub solo lee workfldows en .github/workflows/ de la raiz del repo, nunca dentro de una subcarpeta.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ms-vehiculos/**'
+      - '.github/workflows/deploy-ms-vehiculos.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: ms-vehiculos
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Compilar con el Maven Wrapper
+        run: |
+          chmod +x mvnw
+          ./mvnw -B clean package -DskipTests
+
+      - name: Copiar el jar a la instancia EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT || 22 }}
+          source: 'ms-vehiculos/target/pedidosBackend-0.0.1-SNAPSHOT.jar'
+          target: '/home/${{ secrets.EC2_USER }}/micros'
+          strip_components: 2
+
+      - name: Reiniciar el servicio
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT || 22 }}
+          script: |
+            sudo systemctl restart ms-vehiculos
+            sudo systemctl status ms-vehiculos --no-pager
