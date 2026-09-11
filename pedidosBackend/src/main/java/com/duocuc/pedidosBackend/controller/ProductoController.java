@@ -39,6 +39,7 @@ public class ProductoController {
         return productosService.obtenerProductosPorId(idP);
     }
 
+    //solo lo comento
     @PostMapping("")
     public Productos360 agregarProducto (@RequestBody AgregarProducto agregarProducto) {
         return productosService.agregarProducto(agregarProducto);
