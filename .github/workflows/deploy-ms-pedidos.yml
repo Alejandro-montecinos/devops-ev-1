@@ -31,9 +31,20 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Compilar con el Maven Wrapper
+      - name: Ejecutar tests y generar reporte JaCoCo
         run: |
           chmod +x mvnw
+          ./mvnw -B test jacoco:report
+
+      - name: Subir reporte de cobertura JaCoCo
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: pedidosBackend/target/site/jacoco/
+          if-no-files-found: warn
+
+      - name: Compilar con el Maven Wrapper
+        run: |
           ./mvnw -B clean package -DskipTests
 
       - name: Copiar el jar a la instancia EC2
