@@ -34,7 +34,7 @@ jobs:
       - name: Ejecutar tests y generar reporte JaCoCo
         run: |
           chmod +x mvnw
-          ./mvnw -B test jacoco:report
+          ./mvnw -B test jacoco:report -Dspring.profiles.active=test
 
       - name: Subir reporte de cobertura JaCoCo
         uses: actions/upload-artifact@v4
@@ -44,6 +44,10 @@ jobs:
           if-no-files-found: warn
 
       - name: Compilar con el Maven Wrapper
+        env:
+          DB_URL: ${{ secrets.DB_URL }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
           ./mvnw -B clean package -DskipTests
 
