@@ -1,9 +1,7 @@
 name: Deploy ms-pedidos a EC2
 
 # Este archivo debe vivir en la RAIZ del repo: <raiz-del-repo>/.github/workflows/deploy-ms-pedidos.yml
-# (junto a las carpetas de cada microservicio, ej. ms-pedidos/, y a futuro ms-usuarios/, etc.)
-# GitHub solo lee workfldows en .github/workflows/ de la raiz del repo, nunca dentro de una subcarpeta.
-
+# GitHub solo lee workflows en .github/workflows/ de la raiz del repo, nunca dentro de una subcarpeta.
 
 on:
   push:
@@ -13,13 +11,21 @@ on:
       - '.github/workflows/deploy-ms-pedidos.yml'
   workflow_dispatch:
 
-defaults:
-  run:
-    working-directory: pedidosBackend
+permissions:
+  contents: read
 
 jobs:
-  build-and-deploy:
+  # ─────────────────────────────────────────────
+  # 1. Análisis de seguridad de dependencias (SCA) con Snyk
+  # ─────────────────────────────────────────────
+  snyk-scan:
+    name: Snyk Security Scan
     runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    defaults:
+      run:
+        working-directory: pedidosBackend
 
     steps:
       - name: Checkout codigo
@@ -30,25 +36,131 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: maven
+          cache-dependency-path: pedidosBackend/pom.xml
+
+      - name: Instalar Snyk CLI
+        run: npm install -g snyk
+
+      - name: Snyk test - escanear dependencias Java
+        run: snyk test --severity-threshold=high
+
+      - name: Generar reporte JSON de Snyk
+        if: always()
+        run: |
+          echo "Generando reporte JSON de Snyk..."
+          snyk test --json > snyk-report.json || echo "Snyk encontró problemas, pero se genera el reporte"
+          ls -lh snyk-report.json || echo "No se generó el reporte"
+
+      - name: Subir reporte Snyk
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-report
+          path: pedidosBackend/snyk-report.json
+
+  # ─────────────────────────────────────────────
+  # 2. Tests unitarios y cobertura con JaCoCo
+  # ─────────────────────────────────────────────
+  test:
+    name: Run Tests with JaCoCo
+    runs-on: ubuntu-latest
+    needs: snyk-scan
+    defaults:
+      run:
+        working-directory: pedidosBackend
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: pedidosBackend/pom.xml
 
       - name: Ejecutar tests y generar reporte JaCoCo
         run: |
           chmod +x mvnw
           ./mvnw -B test jacoco:report -Dspring.profiles.active=test
 
-      - name: Subir reporte de cobertura JaCoCo
+      - name: Subir reporte JaCoCo
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-report
           path: pedidosBackend/target/site/jacoco/
-          if-no-files-found: warn
 
-      - name: Compilar con el Maven Wrapper
+  # ─────────────────────────────────────────────
+  # 3. Análisis de calidad y seguridad del código (SAST) con SonarCloud
+  # ─────────────────────────────────────────────
+  sonar-analysis:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+    needs: test
+    defaults:
+      run:
+        working-directory: pedidosBackend
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: pedidosBackend/pom.xml
+
+      - name: Análisis SonarCloud
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          chmod +x mvnw
+          ./mvnw -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+            -Dsonar.projectKey=Alejandro-montecinos_devops-ev-1 \
+            -Dsonar.organization=alejandro-montecinos \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.token=${SONAR_TOKEN} \
+            -Dspring.profiles.active=test
+
+  # ─────────────────────────────────────────────
+  # 4. Build y Deploy a EC2
+  # ─────────────────────────────────────────────
+  build-and-deploy:
+    name: Build and Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: sonar-analysis
+    defaults:
+      run:
+        working-directory: pedidosBackend
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: pedidosBackend/pom.xml
+
+      - name: Compilar JAR
         env:
           DB_URL: ${{ secrets.DB_URL }}
           DB_USERNAME: ${{ secrets.DB_USERNAME }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
+          chmod +x mvnw
           ./mvnw -B clean package -DskipTests
 
       - name: Copiar el jar a la instancia EC2
