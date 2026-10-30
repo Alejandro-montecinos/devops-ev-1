@@ -40,17 +40,20 @@ jobs:
           cache-dependency-path: pedidosBackend/pom.xml
 
       - name: Instalar Snyk CLI
-        run: npm install -g snyk
+        uses: snyk/actions/setup@master
+
+      - name: Preparar permisos y dependencias
+        run: |
+          chmod +x mvnw
+          ./mvnw -B dependency:resolve -Dspring.profiles.active=test
 
       - name: Snyk test - escanear dependencias Java
-        run: snyk test --severity-threshold=high
-
-      - name: Generar reporte JSON de Snyk
-        if: always()
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
-          echo "Generando reporte JSON de Snyk..."
-          snyk test --json > snyk-report.json || echo "Snyk encontró problemas, pero se genera el reporte"
-          ls -lh snyk-report.json || echo "No se generó el reporte"
+          chmod +x mvnw
+          snyk test --severity-threshold=high --json-file-output=snyk-report.json
 
       - name: Subir reporte Snyk
         if: always()
